@@ -10,6 +10,8 @@
 #               3) http://developer.apple.com/documentation/GraphicsImaging/Reference/ColorSync_Manager/ColorSync_Manager.pdf
 #               4) http://www.color.org/privatetag2007-01.pdf
 #               5) http://www.color.org/icc_specs2.xalter (approved revisions, 2010-07-16)
+#               6) Eef Vreeland private communication
+#               7) https://color.org/specification/ICC.2-2019.pdf
 #
 # Notes:        The ICC profile information is different: the format of each
 #               tag is embedded in the information instead of in the directory
@@ -23,7 +25,7 @@ use strict;
 use vars qw($VERSION);
 use Image::ExifTool qw(:DataAccess :Utils);
 
-$VERSION = '1.30';
+$VERSION = '1.39';
 
 sub ProcessICC($$);
 sub ProcessICC_Profile($$$);
@@ -51,6 +53,288 @@ my %profileClass = (
     abst => 'Abstract Profile',
     nmcl => 'NamedColor Profile',
     nkpf => 'Nikon Input Device Profile (NON-STANDARD!)', # (written by Nikon utilities)
+    # additions in v5 (ref 7)
+    cenc => 'ColorEncodingSpace Profile',
+   'mid '=> 'MultiplexIdentification Profile',
+    mlnk => 'MultiplexLink Profile',
+    mvis => 'MultiplexVisualization Profile',
+);
+my %manuSig = ( #6
+    'NONE' => 'none',
+    'none' => 'none', #PH
+    ''     => '', #PH
+    '4d2p' => 'Erdt Systems GmbH & Co KG',
+    'AAMA' => 'Aamazing Technologies, Inc.',
+    'ACER' => 'Acer Peripherals',
+    'ACLT' => 'Acolyte Color Research',
+    'ACTI' => 'Actix Systems, Inc.',
+    'ADAR' => 'Adara Technology, Inc.',
+    'ADBE' => 'Adobe Systems Inc.',
+    'ADI ' => 'ADI Systems, Inc.',
+    'AGFA' => 'Agfa Graphics N.V.',
+    'ALMD' => 'Alps Electric USA, Inc.',
+    'ALPS' => 'Alps Electric USA, Inc.',
+    'ALWN' => 'Alwan Color Expertise',
+    'AMTI' => 'Amiable Technologies, Inc.',
+    'AOC ' => 'AOC International (U.S.A), Ltd.',
+    'APAG' => 'Apago',
+    'APPL' => 'Apple Computer Inc.',
+    'appl' => 'Apple Computer Inc.',
+    'AST ' => 'AST',
+    'AT&T' => 'AT&T Computer Systems',
+    'BAEL' => 'BARBIERI electronic',
+    'berg' => 'bergdesign incorporated',
+    'bICC' => 'basICColor GmbH',
+    'BRCO' => 'Barco NV',
+    'BRKP' => 'Breakpoint Pty Limited',
+    'BROT' => 'Brother Industries, LTD',
+    'BULL' => 'Bull',
+    'BUS ' => 'Bus Computer Systems',
+    'C-IT' => 'C-Itoh',
+    'CAMR' => 'Intel Corporation',
+    'CANO' => 'Canon, Inc. (Canon Development Americas, Inc.)',
+    'CARR' => 'Carroll Touch',
+    'CASI' => 'Casio Computer Co., Ltd.',
+    'CBUS' => 'Colorbus PL',
+    'CEL ' => 'Crossfield',
+    'CELx' => 'Crossfield',
+    'ceyd' => 'Integrated Color Solutions, Inc.',
+    'CGS ' => 'CGS Publishing Technologies International GmbH',
+    'CHM ' => 'Rochester Robotics',
+    'CIGL' => 'Colour Imaging Group, London',
+    'CITI' => 'Citizen',
+    'CL00' => 'Candela, Ltd.',
+    'CLIQ' => 'Color IQ',
+    'clsp' => 'MacDermid ColorSpan, Inc.',
+    'CMCO' => 'Chromaco, Inc.',
+    'CMiX' => 'CHROMiX',
+    'COLO' => 'Colorgraphic Communications Corporation',
+    'COMP' => 'COMPAQ Computer Corporation',
+    'COMp' => 'Compeq USA/Focus Technology',
+    'CONR' => 'Conrac Display Products',
+    'CORD' => 'Cordata Technologies, Inc.',
+    'CPQ ' => 'Compaq Computer Corporation',
+    'CPRO' => 'ColorPro',
+    'CRN ' => 'Cornerstone',
+    'CTX ' => 'CTX International, Inc.',
+    'CVIS' => 'ColorVision',
+    'CWC ' => 'Fujitsu Laboratories, Ltd.',
+    'DARI' => 'Darius Technology, Ltd.',
+    'DATA' => 'Dataproducts',
+    'DCP ' => 'Dry Creek Photo',
+    'DCRC' => 'Digital Contents Resource Center, Chung-Ang University',
+    'DELL' => 'Dell Computer Corporation',
+    'DIC ' => 'Dainippon Ink and Chemicals',
+    'DICO' => 'Diconix',
+    'DIGI' => 'Digital',
+    'DL&C' => 'Digital Light & Color',
+    'DPLG' => 'Doppelganger, LLC',
+    'DS  ' => 'Dainippon Screen',
+    'ds  ' => 'Dainippon Screen',
+    'DSOL' => 'DOOSOL',
+    'DUPN' => 'DuPont',
+    'dupn' => 'DuPont',
+    'Eizo' => 'EIZO NANAO CORPORATION',
+    'EPSO' => 'Epson',
+    'ESKO' => 'Esko-Graphics',
+    'ETRI' => 'Electronics and Telecommunications Research Institute',
+    'EVER' => 'Everex Systems, Inc.',
+    'EXAC' => 'ExactCODE GmbH',
+    'FALC' => 'Falco Data Products, Inc.',
+    'FF  ' => 'Fuji Photo Film Co.,LTD',
+    'FFEI' => 'FujiFilm Electronic Imaging, Ltd.',
+    'ffei' => 'FujiFilm Electronic Imaging, Ltd.',
+    'flux' => 'FluxData Corporation',
+    'FNRD' => 'fnord software',
+    'FORA' => 'Fora, Inc.',
+    'FORE' => 'Forefront Technology Corporation',
+    'FP  ' => 'Fujitsu',
+    'FPA ' => 'WayTech Development, Inc.',
+    'FUJI' => 'Fujitsu',
+    'FX  ' => 'Fuji Xerox Co., Ltd.',
+    'GCC ' => 'GCC Technologies, Inc.',
+    'GGSL' => 'Global Graphics Software Limited',
+    'GMB ' => 'Gretagmacbeth',
+    'GMG ' => 'GMG GmbH & Co. KG',
+    'GOLD' => 'GoldStar Technology, Inc.',
+    'GOOG' => 'Google', #PH
+    'GPRT' => 'Giantprint Pty Ltd',
+    'GTMB' => 'Gretagmacbeth',
+    'GVC ' => 'WayTech Development, Inc.',
+    'GW2K' => 'Sony Corporation',
+    'HCI ' => 'HCI',
+    'HDM ' => 'Heidelberger Druckmaschinen AG',
+    'HERM' => 'Hermes',
+    'HITA' => 'Hitachi America, Ltd.',
+    'HiTi' => 'HiTi Digital, Inc.',
+    'HP  ' => 'Hewlett-Packard',
+    'HTC ' => 'Hitachi, Ltd.',
+    'IBM ' => 'IBM Corporation',
+    'IDNT' => 'Scitex Corporation, Ltd.',
+    'Idnt' => 'Scitex Corporation, Ltd.',
+    'IEC ' => 'Hewlett-Packard',
+    'IIYA' => 'Iiyama North America, Inc.',
+    'IKEG' => 'Ikegami Electronics, Inc.',
+    'IMAG' => 'Image Systems Corporation',
+    'IMI ' => 'Ingram Micro, Inc.',
+    'Inca' => 'Inca Digital Printers Ltd.',
+    'INTC' => 'Intel Corporation',
+    'INTL' => 'N/A (INTL)',
+    'INTR' => 'Intra Electronics USA, Inc.',
+    'IOCO' => 'Iocomm International Technology Corporation',
+    'IPS ' => 'InfoPrint Solutions Company',
+    'IRIS' => 'Scitex Corporation, Ltd.',
+    'Iris' => 'Scitex Corporation, Ltd.',
+    'iris' => 'Scitex Corporation, Ltd.',
+    'ISL ' => 'Ichikawa Soft Laboratory',
+    'ITNL' => 'N/A (ITNL)',
+    'IVM ' => 'IVM',
+    'IWAT' => 'Iwatsu Electric Co., Ltd.',
+    'JPEG' => 'Joint Photographic Experts Group', #PH
+    'JSFT' => 'Jetsoft Development',
+    'JVC ' => 'JVC Information Products Co.',
+    'KART' => 'Scitex Corporation, Ltd.',
+    'Kart' => 'Scitex Corporation, Ltd.',
+    'kart' => 'Scitex Corporation, Ltd.',
+    'KFC ' => 'KFC Computek Components Corporation',
+    'KLH ' => 'KLH Computers',
+    'KMHD' => 'Konica Minolta Holdings, Inc.',
+    'KNCA' => 'Konica Corporation',
+    'KODA' => 'Kodak',
+    'KYOC' => 'Kyocera',
+    'LCAG' => 'Leica Camera AG',
+    'LCCD' => 'Leeds Colour',
+    'lcms' => 'Little CMS', #NealKrawetz
+    'LDAK' => 'Left Dakota',
+    'LEAD' => 'Leading Technology, Inc.',
+    'Leaf' => 'Leaf', #PH
+    'LEXM' => 'Lexmark International, Inc.',
+    'LINK' => 'Link Computer, Inc.',
+    'LINO' => 'Linotronic',
+    'Lino' => 'Linotronic', #PH (NC)
+    'lino' => 'Linotronic', #PH (NC)
+    'LITE' => 'Lite-On, Inc.',
+    'MAGC' => 'Mag Computronic (USA) Inc.',
+    'MAGI' => 'MAG Innovision, Inc.',
+    'MANN' => 'Mannesmann',
+    'MICN' => 'Micron Technology, Inc.',
+    'MICR' => 'Microtek',
+    'MICV' => 'Microvitec, Inc.',
+    'MINO' => 'Minolta',
+    'MITS' => 'Mitsubishi Electronics America, Inc.',
+    'MITs' => 'Mitsuba Corporation',
+    'Mits' => 'Mitsubishi Electric Corporation Kyoto Works',
+    'MNLT' => 'Minolta',
+    'MODG' => 'Modgraph, Inc.',
+    'MONI' => 'Monitronix, Inc.',
+    'MONS' => 'Monaco Systems Inc.',
+    'MORS' => 'Morse Technology, Inc.',
+    'MOTI' => 'Motive Systems',
+    'MSFT' => 'Microsoft Corporation',
+    'MUTO' => 'MUTOH INDUSTRIES LTD.',
+    'NANA' => 'NANAO USA Corporation',
+    'NEC ' => 'NEC Corporation',
+    'NEXP' => 'NexPress Solutions LLC',
+    'NISS' => 'Nissei Sangyo America, Ltd.',
+    'NKON' => 'Nikon Corporation',
+    'ob4d' => 'Erdt Systems GmbH & Co KG',
+    'obic' => 'Medigraph GmbH',
+    'OCE ' => 'Oce Technologies B.V.',
+    'OCEC' => 'OceColor',
+    'OKI ' => 'Oki',
+    'OKID' => 'Okidata',
+    'OKIP' => 'Okidata',
+    'OLIV' => 'Olivetti',
+    'OLYM' => 'OLYMPUS OPTICAL CO., LTD',
+    'ONYX' => 'Onyx Graphics',
+    'OPTI' => 'Optiquest',
+    'PACK' => 'Packard Bell',
+    'PANA' => 'Matsushita Electric Industrial Co., Ltd.',
+    'PANT' => 'Pantone, Inc.',
+    'PBN ' => 'Packard Bell',
+    'PFU ' => 'PFU Limited',
+    'PHIL' => 'Philips Consumer Electronics Co.',
+    'PNTX' => 'HOYA Corporation PENTAX Imaging Systems Division',
+    'POne' => 'Phase One A/S',
+    'PREM' => 'Premier Computer Innovations',
+    'PRIN' => 'Princeton Graphic Systems',
+    'PRIP' => 'Princeton Publishing Labs',
+    'QLUX' => 'Hong Kong',
+    'QMS ' => 'QMS, Inc.',
+    'QPCD' => 'QPcard AB',
+    'QUAD' => 'QuadLaser',
+    'quby' => 'Qubyx Sarl',
+    'QUME' => 'Qume Corporation',
+    'RADI' => 'Radius, Inc.',
+    'RDDx' => 'Integrated Color Solutions, Inc.',
+    'RDG ' => 'Roland DG Corporation',
+    'REDM' => 'REDMS Group, Inc.',
+    'RELI' => 'Relisys',
+    'RGMS' => 'Rolf Gierling Multitools',
+    'RICO' => 'Ricoh Corporation',
+    'RNLD' => 'Edmund Ronald',
+    'ROYA' => 'Royal',
+    'RPC ' => 'Ricoh Printing Systems,Ltd.',
+    'RTL ' => 'Royal Information Electronics Co., Ltd.',
+    'SAMP' => 'Sampo Corporation of America',
+    'SAMS' => 'Samsung, Inc.',
+    'SANT' => 'Jaime Santana Pomares',
+    'SCIT' => 'Scitex Corporation, Ltd.',
+    'Scit' => 'Scitex Corporation, Ltd.',
+    'scit' => 'Scitex Corporation, Ltd.',
+    'SCRN' => 'Dainippon Screen',
+    'scrn' => 'Dainippon Screen',
+    'SDP ' => 'Scitex Corporation, Ltd.',
+    'Sdp ' => 'Scitex Corporation, Ltd.',
+    'sdp ' => 'Scitex Corporation, Ltd.',
+    'SEC ' => 'SAMSUNG ELECTRONICS CO.,LTD',
+    'SEIK' => 'Seiko Instruments U.S.A., Inc.',
+    'SEIk' => 'Seikosha',
+    'SGUY' => 'ScanGuy.com',
+    'SHAR' => 'Sharp Laboratories',
+    'SICC' => 'International Color Consortium',
+    'siwi' => 'SIWI GRAFIKA CORPORATION',
+    'SONY' => 'SONY Corporation',
+    'Sony' => 'Sony Corporation',
+    'SPCL' => 'SpectraCal',
+    'STAR' => 'Star',
+    'STC ' => 'Sampo Technology Corporation',
+    'TALO' => 'Talon Technology Corporation',
+    'TAND' => 'Tandy',
+    'TATU' => 'Tatung Co. of America, Inc.',
+    'TAXA' => 'TAXAN America, Inc.',
+    'TDS ' => 'Tokyo Denshi Sekei K.K.',
+    'TECO' => 'TECO Information Systems, Inc.',
+    'TEGR' => 'Tegra',
+    'TEKT' => 'Tektronix, Inc.',
+    'TI  ' => 'Texas Instruments',
+    'TMKR' => 'TypeMaker Ltd.',
+    'TOSB' => 'TOSHIBA corp.',
+    'TOSH' => 'Toshiba, Inc.',
+    'TOTK' => 'TOTOKU ELECTRIC Co., LTD',
+    'TRIU' => 'Triumph',
+    'TSBT' => 'TOSHIBA TEC CORPORATION',
+    'TTX ' => 'TTX Computer Products, Inc.',
+    'TVM ' => 'TVM Professional Monitor Corporation',
+    'TW  ' => 'TW Casper Corporation',
+    'ULSX' => 'Ulead Systems',
+    'UNIS' => 'Unisys',
+    'UTZF' => 'Utz Fehlau & Sohn',
+    'VARI' => 'Varityper',
+    'VIEW' => 'Viewsonic',
+    'VISL' => 'Visual communication',
+    'VIVO' => 'Vivo Mobile Communication Co., Ltd',
+    'WANG' => 'Wang',
+    'WLBR' => 'Wilbur Imaging',
+    'WTG2' => 'Ware To Go',
+    'WYSE' => 'WYSE Technology',
+    'XERX' => 'Xerox Corporation',
+    'XRIT' => 'X-Rite',
+    'yxym' => 'YxyMaster GmbH',
+    'Z123' => "Lavanya's test Company",
+    'Zebr' => 'Zebra Technologies Inc',
+    'ZRAN' => 'Zoran Corporation',
+    # also seen: "    ",ACMS,KCMS,UCCM,etc2,SCTX
 );
 
 # ICC_Profile tag table
@@ -85,7 +369,7 @@ my %profileClass = (
     },
     targ => {
         Name => 'CharTarget',
-        ValueConv => 'length $val > 128 ? \$val : $val',
+        ValueConv => '$val=~s/\0.*//; length $val > 128 ? \$val : $val',
     },
     chad => 'ChromaticAdaptation',
     chrm => {
@@ -238,11 +522,11 @@ my %profileClass = (
             prmg => 'Perceptual Reference Medium Gamut',
         },
     },
-    meta => { #5 (EVENTUALLY DECODE THIS ONCE WE HAVE A SAMPLE!!)
+    meta => { #5
         Name => 'Metadata',
         SubDirectory => {
             TagTable => 'Image::ExifTool::ICC_Profile::Metadata',
-            Validate => '$type eq "meta"',
+            Validate => '$type eq "dict"',
         },
     },
 
@@ -255,6 +539,95 @@ my %profileClass = (
 
     # Microsoft custom tags (ref http://msdn2.microsoft.com/en-us/library/ms536870.aspx)
     MS00 => 'WCSProfiles',
+
+    psd3 => { #6
+        Name => 'PostScript2CRD3',
+        Binary => 1, # (NC)
+    },
+
+    # new tags in v5 (ref 7)
+    A2B3 => 'AToB3',
+    A2M0 => 'AToM0',
+    B2A3 => 'BToA3',
+    bcp0 => 'BRDFColorimetricParam0',
+    bcp1 => 'BRDFColorimetricParam1',
+    bcp2 => 'BRDFColorimetricParam2',
+    bcp3 => 'BRDFColorimetricParam3',
+    bsp0 => 'BRDFSpectralParam0',
+    bsp1 => 'BRDFSpectralParam1',
+    bsp2 => 'BRDFSpectralParam2',
+    bsp3 => 'BRDFSpectralParam3',
+    bAB0 => 'BRDFAToB0',
+    bAB1 => 'BRDFAToB1',
+    bAB2 => 'BRDFAToB2',
+    bAB3 => 'BRDFAToB3',
+    bBA0 => 'BRDFBToA0',
+    bBA1 => 'BRDFBToA1',
+    bBA2 => 'BRDFBToA2',
+    bBA3 => 'BRDFBToA3',
+    bBD0 => 'BRDFBToD0',
+    bBD1 => 'BRDFBToD1',
+    bBD2 => 'BRDFBToD2',
+    bBD3 => 'BRDFBToD3',
+    bDB0 => 'BRDFDToB0',
+    bDB1 => 'BRDFDToB1',
+    bDB2 => 'BRDFDToB2',
+    bDB3 => 'BRDFDToB3',
+    bMB0 => 'BRDFMToB0',
+    bMB1 => 'BRDFMToB1',
+    bMB2 => 'BRDFMToB2',
+    bMB3 => 'BRDFMToB3',
+    bMS0 => 'BRDFMToS0',
+    bMS1 => 'BRDFMToS1',
+    bMS2 => 'BRDFMToS2',
+    bMS3 => 'BRDFMToS3',
+    dAB0 => 'DirectionalAToB0',
+    dAB1 => 'DirectionalAToB1',
+    dAB2 => 'DirectionalAToB2',
+    dAB3 => 'DirectionalAToB3',
+    dBA0 => 'DirectionalBToA0',
+    dBA1 => 'DirectionalBToA1',
+    dBA2 => 'DirectionalBToA2',
+    dBA3 => 'DirectionalBToA3',
+    dBD0 => 'DirectionalBToD0',
+    dBD1 => 'DirectionalBToD1',
+    dBD2 => 'DirectionalBToD2',
+    dBD3 => 'DirectionalBToD3',
+    dDB0 => 'DirectionalDToB0',
+    dDB1 => 'DirectionalDToB1',
+    dDB2 => 'DirectionalDToB2',
+    dDB3 => 'DirectionalDToB3',
+    gdb0 => 'GamutBoundaryDescription0',
+    gdb1 => 'GamutBoundaryDescription1',
+    gdb2 => 'GamutBoundaryDescription2',
+    gdb3 => 'GamutBoundaryDescription3',
+   'mdv '=> 'MultiplexDefaultValues',
+    mcta => 'MultiplexTypeArray',
+    minf => 'MeasurementInfo',
+    miin => 'MeasurementInputInfo',
+    M2A0 => 'MToA0',
+    M2B0 => 'MToB0',
+    M2B1 => 'MToB1',
+    M2B2 => 'MToB2',
+    M2B3 => 'MToB3',
+    M2S0 => 'MToS0',
+    M2S1 => 'MToS1',
+    M2S2 => 'MToS2',
+    M2S3 => 'MToS3',
+    cept => 'ColorEncodingParams',
+    csnm => 'ColorSpaceName',
+    cloo => 'ColorantOrderOut',
+    clio => 'ColorantInfoOut',
+    c2sp => 'CustomToStandardPcc',
+   'CxF '=> 'CXF',
+    nmcl => 'NamedColor',
+    psin => 'ProfileSequenceInfo',
+    rfnm => 'ReferenceName',
+    svcn => 'SpectralViewingConditions',
+    swpt => 'SpectralWhitePoint',
+    s2cp => 'StandardToCustomPcc',
+    smap => 'SurfaceMap',
+    # smwp ? (seen in some v5 samples)
 
     # the following entry represents the ICC profile header, and doesn't
     # exist as a tag in the directory.  It is only in this table to provide
@@ -274,7 +647,8 @@ my %profileClass = (
     4 => {
         Name => 'ProfileCMMType',
         Format => 'string[4]',
-        # seen: "    ",ACMS,ADBE,APPLE,KCMS,Lino,NKON,UCCM,appl,etc2,lino,none
+        SeparateTable => 'ManuSig',
+        PrintConv => \%manuSig,
     },
     8 => {
         Name => 'ProfileVersion',
@@ -327,24 +701,13 @@ my %profileClass = (
     48 => {
         Name => 'DeviceManufacturer',
         Format => 'string[4]',
-        # KODA = Kodak
-        # ADBE = Adobe ...?
-        # appl = Apple
-        # HP   = HP
-        # CANO = Canon
-        # ISL  = ?
-        # JPEG = JPEG
-        # Leaf = Leaf
-        # MNLT = ?
-        # MSFT = Microsoft
-        # POne = ?
-        # etc2 = ?
-        # lcms = ?
+        SeparateTable => 'ManuSig',
+        PrintConv => \%manuSig,
     },
     52 => {
         Name => 'DeviceModel',
         Format => 'string[4]',
-        # ROMM = Refrence Output Medium Metric
+        # ROMM = Reference Output Medium Metric
     },
     56 => {
         Name => 'DeviceAttributes',
@@ -374,7 +737,8 @@ my %profileClass = (
     80 => {
         Name => 'ProfileCreator',
         Format => 'string[4]',
-        # KODA = Kodak
+        SeparateTable => 'ManuSig',
+        PrintConv => \%manuSig,
     },
     84 => {
         Name => 'ProfileID',
@@ -527,10 +891,11 @@ my %profileClass = (
     ManufacturerName => { },
     MediaColor       => { },
     MediaWeight      => { },
+    CreatorApp       => { },
 );
 
 #------------------------------------------------------------------------------
-# print ICC Profile ID in hex
+# Print ICC Profile ID in hex
 # Inputs: 1) string of numbers
 # Returns: string of hex digits
 sub HexID($)
@@ -545,7 +910,7 @@ sub HexID($)
 }
 
 #------------------------------------------------------------------------------
-# get formatted value from ICC tag (which has the type embedded)
+# Get formatted value from ICC tag (which has the type embedded)
 # Inputs: 0) data reference, 1) offset to tag data, 2) tag data size
 # Returns: Formatted value or undefined if format not supported
 # Notes: The following types are handled by BinaryTables:
@@ -576,7 +941,7 @@ sub FormatICCTag($$$)
     # dataType
     if ($type eq 'data' and $size >= 12) {
         my $form = Get32u($dataPt, $offset+8);
-        # format 0 is ASCII data
+        # format 0 is UTF-8 data
         $form == 0 and return substr($$dataPt, $offset+12, $size-12);
         # binary data and other data types treat as binary (ie. don't format)
     }
@@ -636,7 +1001,7 @@ sub FormatICCTag($$$)
 }
 
 #------------------------------------------------------------------------------
-# Process ICC metadata record (ref 5) (UNTESTED!)
+# Process ICC metadata record (ref 5)
 # Inputs: 0) ExifTool ref, 1) dirInfo ref, 2) tag table ref
 # Returns: 1 on success
 sub ProcessMetadata($$$)
@@ -668,7 +1033,7 @@ sub ProcessMetadata($$$)
         my $namePtr = Get32u($dataPt, $entry);
         my $nameLen = Get32u($dataPt, $entry + 4);
         my $valuePtr = Get32u($dataPt, $entry + 8);
-        my $valueLen = Get32u($dataPt, $entry + 16);
+        my $valueLen = Get32u($dataPt, $entry + 12);
         next unless $namePtr and $valuePtr;   # ignore if offsets are zero
         if ($namePtr < $minPtr or $namePtr + $nameLen > $dirLen or
             $valuePtr < $minPtr or $valuePtr + $valueLen > $dirLen)
@@ -676,8 +1041,8 @@ sub ProcessMetadata($$$)
             $et->Warn('Corrupted ICC meta dictionary');
             last;
         }
-        my $tag = substr($dataPt, $dirStart + $namePtr, $nameLen);
-        my $val = substr($dataPt, $dirStart + $valuePtr, $valueLen);
+        my $tag = substr($$dataPt, $dirStart + $namePtr, $nameLen);
+        my $val = substr($$dataPt, $dirStart + $valuePtr, $valueLen);
         $tag = $et->Decode($tag, 'UTF16', 'MM', 'UTF8');
         $val = $et->Decode($val, 'UTF16', 'MM');
         # generate tagInfo if it doesn't exist
@@ -686,6 +1051,7 @@ sub ProcessMetadata($$$)
             $name =~ s/\s+(.)/\u$1/g;
             $name =~ tr/-_a-zA-Z0-9//dc;
             next unless length $name;
+            $et->VPrint(0, $$et{INDENT}, "[adding $tag]\n");
             AddTagToTable($tagTablePtr, $tag, { Name => $name });
         }
         $et->HandleTag($tagTablePtr, $tag, $val);
@@ -748,7 +1114,7 @@ sub ValidateICC($)
     $profileClass{substr($$valPtr, 12, 4)} or $err = 'profile class';
     my $col = substr($$valPtr, 16, 4); # ColorSpaceData
     my $con = substr($$valPtr, 20, 4); # ConnectionSpace
-    my $match = '(XYZ |Lab |Luv |YCbr|Yxy |RGB |GRAY|HSV |HLS |CMYK|CMY |[2-9A-F]CLR)';
+    my $match = '(XYZ |Lab |Luv |YCbr|Yxy |RGB |GRAY|HSV |HLS |CMYK|CMY |[2-9A-F]CLR|nc..|\0{4})';
     $col =~ /$match/ or $err = 'color space';
     $con =~ /$match/ or $err = 'connection space';
     return $err ? "Invalid ICC profile (bad $err)" : undef;
@@ -774,7 +1140,7 @@ sub ProcessICC($$)
         return 1;
     }
     $raf->Seek(0, 0);
-    unless ($raf->Read($buff, $size)) {
+    unless ($raf->Read($buff, $size) == $size) {
         $et->Error('Truncated ICC profile');
         return 1;
     }
@@ -860,7 +1226,7 @@ sub ProcessICC_Profile($$$)
         my $tagInfo = $et->GetTagInfo($tagTablePtr, $tagID);
         # unknown tags aren't generated automatically by GetTagInfo()
         # if the tagID's aren't numeric, so we must do this manually:
-        if (not $tagInfo and $$et{OPTIONS}{Unknown}) {
+        if (not $tagInfo and ($$et{OPTIONS}{Unknown} or $verbose)) {
             $tagInfo = { Unknown => 1 };
             AddTagToTable($tagTablePtr, $tagID, $tagInfo);
         }
@@ -906,7 +1272,7 @@ sub ProcessICC_Profile($$$)
                         DataPt => $dataPt,
                         Size   => $strLen,
                         Start  => $valuePtr + $strPos,
-                        Format => "type '$fmt'",
+                        Format => "type '${fmt}'",
                     );
                 }
                 $et->Warn("Corrupted $$tagInfo{Name} data") if $i < $count;
@@ -923,7 +1289,7 @@ sub ProcessICC_Profile($$$)
             DataPt => $dataPt,
             Size   => $size,
             Start  => $valuePtr,
-            Format => "type '$fmt'",
+            Format => "type '${fmt}'",
         );
         if ($subdir) {
             my $name = $$tagInfo{Name};
@@ -948,10 +1314,10 @@ sub ProcessICC_Profile($$$)
                 DirName  => $name,
                 Parent   => $$dirInfo{DirName},
             );
-            my $type = substr($$dataPt, $valuePtr, 4);
+            my $type = $fmt;
             #### eval Validate ($type)
             if (defined $$subdir{Validate} and not eval $$subdir{Validate}) {
-                $et->Warn("Invalid $name data");
+                $et->Warn("Invalid ICC $name data");
             } else {
                 $et->ProcessDirectory(\%subdirInfo, $newTagTable, $$subdir{ProcessProc});
             }
@@ -990,7 +1356,7 @@ data created on one device into another device's native color space.
 
 =head1 AUTHOR
 
-Copyright 2003-2017, Phil Harvey (phil at owl.phy.queensu.ca)
+Copyright 2003-2022, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
@@ -1002,6 +1368,8 @@ under the same terms as Perl itself.
 =item L<http://www.color.org/icc_specs2.html>
 
 =item L<http://developer.apple.com/documentation/GraphicsImaging/Reference/ColorSync_Manager/ColorSync_Manager.pdf>
+
+=item L<https://color.org/specification/ICC.2-2019.pdf>
 
 =back
 
